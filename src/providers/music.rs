@@ -1,11 +1,8 @@
 use crate::render::display::ContentProvider;
-#[cfg(not(target_os = "windows"))]
 use anyhow::anyhow;
 use anyhow::Result;
 use async_stream::try_stream;
-#[cfg(not(target_os = "windows"))]
 use embedded_graphics::prelude::Primitive;
-#[cfg(not(target_os = "windows"))]
 use embedded_graphics::primitives::{Line, PrimitiveStyle};
 use embedded_graphics::{
     geometry::Size, image::Image, pixelcolor::BinaryColor, prelude::Point, Drawable,
@@ -48,14 +45,7 @@ lazy_static! {
     static ref NOTE_BMP: Bmp<'static, BinaryColor> =
         Bmp::<BinaryColor>::from_slice(NOTE_ICON).expect("Failed to parse BMP for note icon!");
 }
-#[cfg(target_os = "windows")]
-lazy_static! {
-// Windows doesn't expose the current progress within the song so we don't draw
-// it here TODO: Spice this up?
-static ref PLAYER_TEMPLATE: FrameBuffer = FrameBuffer::new();
-}
 
-#[cfg(not(target_os = "windows"))]
 lazy_static! {
 static ref PLAYER_TEMPLATE: FrameBuffer = {
     let mut base = FrameBuffer::new();
@@ -182,20 +172,17 @@ impl MediaPlayerRenderer {
 
         let metadata = &progress.metadata;
 
-        #[cfg(not(target_os = "windows"))]
-        {
-            let length = metadata.length().unwrap_or(0) as f64;
+        let length = metadata.length().unwrap_or(0) as f64;
 
-            let current = progress.position as f64;
+        let current = progress.position as f64;
 
-            let completion = (current / length).clamp(0_f64, 1_f64);
+        let completion = (current / length).clamp(0_f64, 1_f64);
 
-            let pixels = (128_f64 - 2_f64 * 3_f64) * completion;
-            let style = PrimitiveStyle::with_stroke(BinaryColor::On, 3);
-            Line::new(Point::new(3, 35), Point::new(pixels as i32 + 3, 35))
-                .into_styled(style)
-                .draw(&mut display)?;
-        }
+        let pixels = (128_f64 - 2_f64 * 3_f64) * completion;
+        let style = PrimitiveStyle::with_stroke(BinaryColor::On, 3);
+        Line::new(Point::new(3, 35), Point::new(pixels as i32 + 3, 35))
+            .into_styled(style)
+            .draw(&mut display)?;
 
         let artists = metadata.artists()?;
         let title = metadata.title()?;

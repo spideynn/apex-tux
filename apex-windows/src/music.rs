@@ -21,6 +21,7 @@ use windows::Media::{
 pub struct Metadata {
     title: String,
     artists: String,
+    length: u64,
 }
 
 impl MetadataTrait for Metadata {
@@ -32,8 +33,8 @@ impl MetadataTrait for Metadata {
         Ok(self.artists.clone())
     }
 
-    fn length(&self) -> Result<i64> {
-        Ok(0)
+    fn length(&self) -> Result<u64> {
+        Ok(self.length)
     }
 }
 
@@ -109,10 +110,23 @@ impl AsyncPlayer for Player {
     #[allow(clippy::needless_lifetimes)]
     fn metadata<'this>(&'this self) -> Self::MetadataFuture<'this> {
         async {
-            let session = self.media_properties().await?;
-            let title = session.Title()?.to_string_lossy();
-            let artists = session.Artist()?.to_string_lossy();
-            Ok(Metadata { title, artists })
+            let session = self.current_session();
+
+            let length = match session {
+                Ok(session) => {
+                    let timeline = session.GetTimelineProperties().map_err(|_| anyhow!("Windows"))?;
+                    let timespan = timeline.EndTime().map_err(|_| anyhow!("Windows"))?;
+
+                    timespan.Duration as u64
+                },
+                Err(_) => 0,
+            };
+
+            let props = self.media_properties().await?;
+            let title = props.Title()?.to_string_lossy();
+            let artists = props.Artist()?.to_string_lossy();
+
+            Ok(Metadata { title, artists, length })
         }
     }
 
@@ -144,14 +158,35 @@ impl AsyncPlayer for Player {
 
     #[allow(clippy::needless_lifetimes)]
     fn name<'this>(&'this self) -> Self::NameFuture<'this> {
-        // There might be a Windows API to find the name of the player but the user most
-        // likely will never see this anyway
-        async { String::from("windows-api") }
+        async {
+            let session = self.current_session();
+            let session = match session {
+                Ok(session) => session,
+                Err(_) => return String::from("windows-api"),
+            };
+
+            let name = match session.SourceAppUserModelId() {
+                Ok(name) => name,
+                Err(_) => return String::from("windows-api"),
+            };
+
+            name.to_string()
+        }
     }
 
     #[allow(clippy::needless_lifetimes)]
     fn position<'this>(&'this self) -> Self::PositionFuture<'this> {
-        // TODO: Find the API for this?
-        async { Ok(0) }
+        async {
+            let session = self.current_session();
+            let session = match session {
+                Ok(session) => session,
+                Err(_) => return Ok(0),
+            };
+    
+            let timeline = session.GetTimelineProperties().map_err(|_| anyhow!("Windows"))?;
+            let position = timeline.Position().map_err(|_| anyhow!("Windows"))?;
+
+            Ok(position.Duration)
+        }
     }
 }
